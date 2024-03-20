@@ -1,0 +1,2 @@
+event_id,strike,dip,rake,quality,fault_plane_uncertainty,aux_plane_uncertainty,num_p_pol,num_sp_ratios,polarity_misfit,prob_mech,sta_distribution_ratio,sp_misfit,mult_solution_flag,time,origin_lat,origin_lon,origin_depth_km,horz_uncert_km,vert_uncert_km
+123456,180.0,90.0,172.5,A,0.0,14.4,102,102,3.3,100.0,71.8,-0.3,False,2000-01-01 00:00:00,37.412116,-122.059357,12.345,0.2,0.4

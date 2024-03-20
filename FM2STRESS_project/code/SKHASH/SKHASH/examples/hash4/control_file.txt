@@ -1,0 +1,56 @@
+## Control file example for SKHASH driver4
+
+$input_format  # format of input files
+hash4
+
+$stfile        # station list filepath
+examples/hash4/IN/scsn.stations_5char.txt
+
+$plfile        # station polarity reversal filepath
+examples/hash4/IN/scsn.reverse.txt
+
+$fpfile        # P-polarity input filepath
+examples/hash4/IN/north4.phase.txt
+
+$outfile1      # focal mechanisms output filepath
+examples/hash4/OUT/out.txt
+
+$outfile2      # acceptable plane output filepath
+examples/hash4/OUT/out2.txt
+
+$vmodel_paths  # whitespace/newline delimited list of paths to the velocity models
+examples/velocity_models/socal.txt
+examples/velocity_models/north.txt
+examples/velocity_models/lab1.txt
+examples/velocity_models/sgm1.txt
+examples/velocity_models/vb1.txt
+
+$npolmin       # mininum number of polarity data (e.g., 8)
+8
+
+$max_agap      # maximum azimuthal gap
+90
+
+$max_pgap      # maximum "plungal" gap
+60
+
+$dang          # minimum grid spacing (degrees)
+5
+
+$nmc           # number of trials (e.g., 30)
+30
+
+$maxout        # max num of acceptable focal mech. outputs (e.g., 500)
+500
+
+$badfrac       # fraction polarities assumed bad
+0.1
+
+$delmax        # maximum allowed source-receiver distance in km.
+120
+
+$cangle        # angle for computing mechanisms probability
+45
+
+$prob_max      # probability threshold for multiples (e.g., 0.1)
+0.25

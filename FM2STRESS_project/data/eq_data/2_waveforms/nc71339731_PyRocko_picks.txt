@@ -1,0 +1,21 @@
+# Snuffler Markers File Version 0.2
+phase: 2010-01-13 06:46:55.6601  0 NC.KCT..HHZ     None           None         None         P           1 False
+phase: 2010-01-13 06:46:56.6450  0 PB.B046..EHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:46:57.3830  0 PB.B932..EHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:46:58.0887  0 NC.KMPB..HHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:46:58.1967  0 PB.B047..EHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:46:58.9825  2 BK.JCC..HHZ     None           None         None         P           1 False
+phase: 2010-01-13 06:47:01.8754  0 PB.B933..EHZ    None           None         None         P          -1 False
+phase: 2010-01-13 06:47:02.0058  0 PB.B049..EHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:47:02.2597  0 NC.KRP..HHZ     None           None         None         P           1 False
+phase: 2010-01-13 06:47:03.0181  0 NC.KHMB..HHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:47:03.7965  0 NC.KMR..HHZ     None           None         None         P          -1 False
+phase: 2010-01-13 06:47:06.0626  0 PB.B934..EHZ    None           None         None         P           1 False
+phase: 2010-01-13 06:47:06.4919  0 NC.KRMB..HHZ    None           None         None         P          -1 False
+phase: 2010-01-13 06:47:10.4571  0 NC.KSXB..HHZ    None           None         None         P          -1 False
+phase: 2010-01-13 06:47:14.2784  0 TA.M02C..BHZ    None           None         None         P          -1 False
+phase: 2010-01-13 06:47:15.0070  0 BK.WDC..HHZ     None           None         None         P          -1 False
+phase: 2010-01-13 06:47:17.0793  0 NC.GVV..EHZ     None           None         None         P           1 False
+phase: 2010-01-13 06:47:18.5752  0 BK.YBH..HH3     None           None         None         P           1 False
+phase: 2010-01-13 06:47:18.6304  0 BK.YBH..HHZ     None           None         None         P           1 False
+phase: 2010-01-13 06:47:21.1015  0 NC.GTS..EHZ     None           None         None         P          -1 False

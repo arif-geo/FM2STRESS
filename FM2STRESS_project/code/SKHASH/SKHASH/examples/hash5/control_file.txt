@@ -1,0 +1,49 @@
+## Control file example for SKHASH driver5
+
+$input_format  # format of input files
+hash5
+
+$plfile        # station polarity reversal filename
+examples/hash5/IN/scsn.reverse.txt
+
+$fpfile        # P-polarity input filename
+examples/hash5/IN/north2.phase.txt
+
+$simulpsfile   # SIMULPS file
+examples/hash5/IN/north5.simul.txt
+
+$outfile1      # focal mechanisms output filename
+examples/hash5/OUT/out.txt
+
+$outfile2      # acceptable plane output filename
+examples/hash5/OUT/out2.txt
+
+$npolmin       # mininum number of polarity data
+8
+
+$max_agap      # maximum azimuthal gap
+90
+
+$max_pgap      # maximum "plungal" gap
+60
+
+$dang          # minimum grid spacing (degrees)
+5
+
+$nmc           # number of trials
+30
+
+$maxout        # max num of acceptable focal mech. outputs
+300
+
+$badfrac       # fraction polarities assumed bad
+0.1
+
+$delmax        # maximum allowed source-receiver distance in km.
+120
+
+$cangle        # angle for computing mechanisms probability
+45
+
+$prob_max      # probability threshold for multiples (e.g., 0.1)
+0.25

@@ -1,0 +1,52 @@
+## Control file example for SKHASH smile
+
+$catfile       # earthquake catalog filepath
+examples/smile/IN/eq_catalog.csv
+
+$fpfile        # P-polarity input filepath
+examples/smile/IN/pol.csv
+
+$ampfile       # amplitude input filepath
+examples/smile/IN/amp.csv
+
+$outfile1      # focal mechanisms output filepath
+examples/smile/OUT/out.csv
+
+$outfile_pol_agree  # record of polarity (dis)agreeement output filepath
+examples/smile/OUT/out_polagree.csv
+
+$outfile_sp_agree
+examples/smile/OUT/out_spagree.csv
+
+$outfile_pol_info
+examples/smile/OUT/out_polinfo.csv
+
+$outfolder_plots
+examples/smile/OUT
+
+$npolmin       # mininum number of polarity data (e.g., 8)
+8
+
+$min_polarity_weight  # Any polarities with a abs(weight) < min_polarity_weight will be ignored
+0.1
+
+$nmc           # number of trials (e.g., 30)
+30
+
+$maxout        # max num of acceptable focal mech. outputs (e.g., 500)
+500
+
+$ratmin        # minimum allowed signal to noise ratio
+3
+
+$badfrac       # fraction polarities assumed bad
+0.0
+
+$qbadfrac      # assumed noise in amplitude ratios, log10 (e.g. 0.3 for a factor of 2)
+0.3
+
+$delmax        # maximum allowed source-receiver distance in km.
+120
+
+$prob_max      # probability threshold for multiples (e.g., 0.1)
+0.1

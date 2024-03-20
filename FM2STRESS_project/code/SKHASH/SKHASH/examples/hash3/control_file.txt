@@ -1,0 +1,62 @@
+## Control file example for SKHASH driver3
+
+$input_format  # format of input files
+hash3
+
+$stfile        # station list filepath
+examples/hash3/IN/scsn.stations.txt
+
+$plfile        # station polarity reversal filepath
+examples/hash3/IN/scsn.reverse.txt
+
+$corfile       # station correction filepath
+examples/hash3/IN/north3.statcor.txt
+
+$ampfile       # amplitude input filepath
+examples/hash3/IN/north3.amp.txt
+
+$fpfile        # P-polarity input filepath
+examples/hash3/IN/north2.phase.txt
+
+$outfile1      # focal mechanisms output filepath
+examples/hash3/OUT/out.txt
+
+$outfile2      # acceptable plane output filepath
+examples/hash3/OUT/out2.txt
+
+$vmodel_paths  # whitespace/newline delimited list of paths to the velocity models
+examples/velocity_models/socal.txt
+examples/velocity_models/north.txt
+examples/velocity_models/lab1.txt
+examples/velocity_models/sgm1.txt
+examples/velocity_models/vb1.txt
+
+$npolmin       # mininum number of polarity data (e.g., 8)
+8
+
+$dang          # minimum grid spacing (degrees)
+5
+
+$nmc           # number of trials (e.g., 30)
+30
+
+$maxout        # max num of acceptable focal mech. outputs (e.g., 500)
+500
+
+$ratmin        # minimum allowed signal to noise ratio
+3
+
+$badfrac       # fraction polarities assumed bad
+0.1
+
+$qbadfrac      # assumed noise in amplitude ratios, log10 (e.g. 0.3 for a factor of 2)
+0.3
+
+$delmax        # maximum allowed source-receiver distance in km.
+200
+
+$cangle        # angle for computing mechanisms probability
+45
+
+$prob_max      # probability threshold for multiples (e.g., 0.1)
+0.2

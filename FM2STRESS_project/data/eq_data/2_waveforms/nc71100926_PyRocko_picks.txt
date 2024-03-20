@@ -1,0 +1,16 @@
+# Snuffler Markers File Version 0.2
+phase: 2008-02-24 13:00:24.9899  0 XQ.ME30.01.BHZ  None           None         None         P           1 False
+phase: 2008-02-24 13:00:26.4265  0 BK.JCC..HHZ     None           None         None         P          -1 False
+phase: 2008-02-24 13:00:26.5135  0 XQ.ME31.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:28.4170  0 XQ.ME32.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:30.2303  0 XQ.ME33.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:31.2895  0 XQ.ME04.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:31.4306  0 XQ.ME29.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:31.9927  0 XQ.ME35.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:32.4140  0 XQ.ME34.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:33.5593  0 XQ.ME27.01.BHZ  None           None         None         P           1 False
+phase: 2008-02-24 13:00:34.1378  0 XQ.ME37.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:35.7106  0 XQ.ME36.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:35.9973  0 XQ.ME39.01.BHZ  None           None         None         P           1 False
+phase: 2008-02-24 13:00:36.0638  0 XQ.ME08.01.BHZ  None           None         None         P          -1 False
+phase: 2008-02-24 13:00:37.8408  0 XQ.ME38.01.BHZ  None           None         None         P          -1 False
