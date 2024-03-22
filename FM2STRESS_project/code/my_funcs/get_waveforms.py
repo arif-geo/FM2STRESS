@@ -64,8 +64,8 @@ def get_waveforms(client_list, inventory, event_id, starttime, endtime, output_f
                                     starttime=starttime,
                                     endtime=endtime,
                                 )
-                                # st += temp_st
-                                print(f"{'*'*8} waveform downloaded {network}.{station}.{channel} from {client_name}.")
+                                st += temp_st
+                                # print(f"{'*'*8} waveform downloaded {network}.{station}.{channel} from {client_name}.")
 
                                 # download station information
                                 try:
@@ -81,8 +81,8 @@ def get_waveforms(client_list, inventory, event_id, starttime, endtime, output_f
                                     )
                                     
                                     st += temp_st
-                                    inv.write(f"{output_folder}/{network}.{station}_{client_name}.xml", format="STATIONXML")
-                                    inv.write(f"{output_folder}/{network}.{station}_{client_name}.txt", format="STATIONTXT")
+                                    # inv.write(f"{output_folder}/{network}.{station}_{client_name}.xml", format="STATIONXML")
+                                    # inv.write(f"{output_folder}/{network}.{station}_{client_name}.txt", format="STATIONTXT")
                                     
                                     success_stn.append(station)
                                     print(f" inventory downloaded: {len(success_stn)} out of {len(inventory.get_contents()['stations'])} stations")
@@ -101,3 +101,5 @@ def get_waveforms(client_list, inventory, event_id, starttime, endtime, output_f
     # write waveforms to file
     # st.write(f"{output_folder}/{event_id}.mseed", format="MSEED")
     print(f"Total success: {len(success_stn)} out of {len(inventory.get_contents()['stations'])} stations")
+
+    return st

@@ -1,0 +1,21 @@
+# Snuffler Markers File Version 0.2
+phase: 2018-06-03 10:05:00.90758  0 NC.KHBB..HHZ    None           None         None         P          -1 False
+phase: 2018-06-03 10:05:03.33512  0 NC.KPP..EHZ     None           None         None         P           1 False
+phase: 2018-06-03 10:05:03.37640  0 PB.B935..EHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:05.24499  0 NC.KHMB..HHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:05.97882  0 NC.KCR.02.EHZ   None           None         None         P           1 False
+phase: 2018-06-03 10:05:06.80395  0 NC.KKP..EHZ     None           None         None         P          -1 False
+phase: 2018-06-03 10:05:06.87927  0 NC.KMR..HHZ     None           None         None         P          -1 False
+phase: 2018-06-03 10:05:07.08882  0 PB.B049..EHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:07.34601  0 PB.B045..EHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:07.34804  0 BK.JCC.00.HHZ   None           None         None         P           1 False
+phase: 2018-06-03 10:05:08.19135  0 NC.KOM.02.HNZ   None           None         None         P        None False
+phase: 2018-06-03 10:05:08.58428  0 NC.KMPB..HHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:09.47342  0 NC.KBN..EHZ     None           None         None         P          -1 False
+phase: 2018-06-03 10:05:09.67413  0 NC.KRP..HHZ     None           None         None         P           1 False
+phase: 2018-06-03 10:05:09.82110  0 PB.B047..EHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:09.91962  0 PB.B932..EHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:10.36036  0 NC.KSM.02.EHZ   None           None         None         P           1 False
+phase: 2018-06-03 10:05:10.40985  0 PB.B046..EHZ    None           None         None         P           1 False
+phase: 2018-06-03 10:05:10.62756  0 PB.B934..EHZ    None           None         None         P          -1 False
+phase: 2018-06-03 10:05:10.73086  0 NC.KCT..HHZ     None           None         None         P           1 False

@@ -6,17 +6,15 @@ from tqdm import tqdm
 from multiprocessing import Pool
 import logging
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-file_handler = logging.FileHandler(f"../data/eq_data/download_log.txt")
-logger.addHandler(file_handler)
+
+#==================================================================================================
 
 def download_station(args):
     """
     Download waveforms and station information for a specific station.
     This function will be used in parallel processing.
     """
-    client, network, station, priority_channels, starttime, endtime, output_folder, st, inv, success_stn = args
+    client, network, station, priority_channels, starttime, endtime, st, inv, success_stn = args
     st_local = Stream()
     inv_local = Inventory()
 
@@ -41,41 +39,30 @@ def download_station(args):
                 endtime=endtime,
             )
 
-            # Download station information
-            try:
-                temp_inv = client.get_stations(
-                    network=network.code,
-                    station=station.code,
-                    location="*",
-                    channel=priority_channel,
-                    starttime=starttime,
-                    endtime=endtime,
-                    level="response",
-                )
+            # if station.code not in success_stn:
+            success_stn.append(station.code)
+            st_local += temp_st
+            inv_local.networks.extend(temp_inv.networks)
 
-                # if station.code not in success_stn:
-                success_stn.append(station.code)
-                st_local += temp_st
-                inv_local.networks.extend(temp_inv.networks)
-                # print(f"successful stream and inv: {network.code}.{station.code}.{priority_channel}")
-                
-                
-                logger.info(f"Waveform downloaded: {network.code}.{station.code}.{priority_channel} from {client.base_url}.")
-                logger.info(f"Inventory downloaded: {len(success_stn)} out of {len(inventory.get_contents()['stations'])} stations.")
-                
-                # Break the loop if the right channel is found
-                break
-
-            except Exception as e:
-                logger.error(f"Failed to download station information for {network.code}.{station.code}.{priority_channel} from {client.base_url}: {e}")
+            # Break the loop if the right channel is found
+            break
 
         except Exception as e:
-            logger.error(f"Failed to download waveforms for {network.code}.{station.code} from {client.base_url}: {e}")
+            # print(f"failed: {network.code}.{station.code}.{priority_channel}")
+            # continue to the next channel
+            pass
+
     return st_local, inv_local
 
 #==================================================================================================
 
-def get_waveforms_parallel(client_list, inventory, starttime, endtime, output_folder, priority_channels):
+def get_waveforms_parallel(
+    starttime, endtime, 
+    inventory = None, 
+    client_list = ['IRIS', 'NCEDC'],#, 'SCEDC'],
+    priority_channels = ['HH*', 'BH*', 'HN*', 'EH*'],
+    output_folder = None,
+    ):
     """
     Get waveforms for a specific event from a list of clients with parallel processing.
 
@@ -86,17 +73,16 @@ def get_waveforms_parallel(client_list, inventory, starttime, endtime, output_fo
         output_folder (str): Output folder for the waveforms.
         priority_channels (list): List of priority channels to download.
 
+        inventory (obspy.Inventory): *** Must be `stationxml` format ***
+
     Returns:
         None
     """
     global success_stn
     success_stn = []
     waveforms_list = []
-    inv_list = []
     st = Stream()
     inv = Inventory()
-
-    logger.info(f"Downloading waveforms...")
     
     # Prepare arguments for download_station function
     args_list = []
@@ -105,10 +91,13 @@ def get_waveforms_parallel(client_list, inventory, starttime, endtime, output_fo
 
         for network in inventory.networks:
             for station in network.stations:
-                args_list.append((client, network, station, priority_channels, starttime, endtime, output_folder, st, inv, success_stn))
+                args_list.append((client, network, station, priority_channels, starttime, endtime, st, inv, success_stn))
 
     # Parallelize the loop over stations
-    pool = Pool(processes=6)
+    #get core count
+    core_count = os.cpu_count() - 1 # leave one core for other processes
+    pool = Pool(core_count) # use all available cores
+
     with tqdm(total=len(args_list), disable=True) as pbar:
         for temp_st, temp_inv in pool.imap_unordered(download_station, args_list):
             pbar.update(1) # update progress bar for each station
@@ -119,9 +108,55 @@ def get_waveforms_parallel(client_list, inventory, starttime, endtime, output_fo
     pool.close()
     pool.join()
 
-    # Write waveforms to file
-    # st.write(f"{output_folder}/event_waveforms.mseed", format="MSEED")
-    # # inv.write(f"{output_folder}/event_inventory.xml", format="STATIONXML")
-    # inv.write(f"{output_folder}/{}event_inventory.txt", format="STATIONTXT")
-
     return st, inv
+
+#==================================================================================================
+
+def get_station_inventory(
+    starttime, endtime,
+    client_list = ['IRIS', 'NCEDC', 'SCEDC'],
+    channels_string = 'HH*,BH*,HN*,EH*',
+    invetory_type="stationxml",
+    minlatitude=39, maxlatitude=42, minlongitude=-126, maxlongitude=-122.5,
+    ):
+
+    """ 
+    get the station inventory for a specific event from a list of clients with parallel processing.
+
+    output:
+           station inventory: stationtxt or stationxml
+    """
+
+        # create an empty inventory object
+    merged_inventory = Inventory()
+
+
+    # Loop through each client (IRIS, NCEDC, SCEDC data centers)
+    for client_name in client_list:
+        client = Client(client_name, debug=False, timeout=60)
+        try:
+            inv = client.get_stations(
+                network="*",
+                station="*",
+                location="*",
+                channel=channels_string,
+                starttime=starttime,
+                endtime=endtime,
+                level="channel",
+                minlatitude=minlatitude,
+                maxlatitude=maxlatitude,
+                minlongitude=minlongitude,
+                maxlongitude=maxlongitude,
+
+            )
+            merged_inventory.networks.extend(inv.networks)
+            # print(f"client.get_stations({client_name}) is successful")
+            
+        except Exception as e:
+            # print(f"Error fetching data from {client_name}: {e}") 
+            pass
+    
+    # return merged_inventory
+    return merged_inventory
+
+

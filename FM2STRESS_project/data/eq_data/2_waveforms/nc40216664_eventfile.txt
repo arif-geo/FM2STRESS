@@ -1,2 +1,0 @@
-year,month,day,hour,minute,second,latitude,longitude,depth,hori_err,vert_err,mag,EVID
-2008,4,30,3,3,6,40.8358333,-123.4968333,27.755,0.3,1.15,5.4,nc40216664
