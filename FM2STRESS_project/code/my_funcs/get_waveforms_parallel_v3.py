@@ -34,7 +34,7 @@ def download_station(args):
                 network=network.code,
                 station=station.code,
                 location="*",
-                channel=priority_channel,
+                channel=priority_channels,
                 starttime=starttime,
                 endtime=endtime,
             )
@@ -80,7 +80,7 @@ def get_waveforms_parallel(
     """
     global success_stn
     success_stn = []
-    waveforms_list = []
+    # waveforms_list = []
     st = Stream()
     inv = Inventory()
     
