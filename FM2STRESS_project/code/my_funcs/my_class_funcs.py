@@ -245,22 +245,30 @@ class MyFileConverter:
         """
         # read phasenet picks
         pndting_df = pd.read_csv(phasenet_diting_picks, parse_dates=["begin_time", "phase_time"])
+        # create new columns for pyrocko picks
+        pndting_df['pyrocko_phase_time'], pndting_df['pyrocko_polarity'] = None, None
 
         # read pyrocko marker file
         with open(pyrocko_markers, 'r') as f:
-            lines = f.readlines()[1:]        # skip 1st line
+            lines = f.readlines()[1:]                               # skip 1st line
+            lines = lines[:-1] if len(lines[-1]) == 0 else lines    # remove the last line if it is empty
+            total_lines = len(lines)
 
             current_event = None # key for the dictionary
             current_phases = []  # list as value for the dictionary
             event_data = {}      # dictionary to store the event data
 
-            for line in lines:
+            for i, line in enumerate(lines):
                 line = line.strip().split()
+                if line == lines[-1]:
+                        print('last line:' , line)
+                        event_data[current_event] = current_phases
                 
                 if line[0] == 'event:': # get event details
                     if current_event is not None:
-                        # make a new key with empty list values
+                        # when a new event is found, store the previous event data
                         event_data[current_event] = current_phases
+                        # print(current_event)
                         
                     current_event = line[-2]
                     current_phases = []       # reset the list for new event
@@ -274,26 +282,30 @@ class MyFileConverter:
                     # append the phase details to the list for the current event
                     current_phases.append([station_id_xx, phase_time, phase_type, polarity])
 
-        # print the dictionary keys
-
-        event_data[list(event_data.keys())[0]]
+                    # if this is the last line, store the event data
+                    if i == total_lines - 1:
+                        event_data[current_event] = current_phases
+                    
 
         for event_id, phase_data in event_data.items():
             evfile_name = f"{event_id}.mseed"
+
             for station_id, phase_time, phase_type, polarity in phase_data:
+
                 # get the row index of the phasenet-diting dataframe 
                 # by matching the event_id and station_id
-                row_idx = pndting_df[
-                    (pndting_df.station_id == station_id) & 
-                    (pndting_df.file_name==evfile_name) &
-                    (pndting_df.phase_type == phase_type)
+                stn_rows = pndting_df[
+                    (pndting_df.file_name == evfile_name) &
+                    (pndting_df.station_id == station_id)
+                    # & (pndting_df.phase_type == phase_type)
                     ].index
-                if len(row_idx) > 0:
-                    row_idx = row_idx[0]
+                                
+                if len(stn_rows) > 0:
+                    row_idx = stn_rows[0]
                     pndting_df.loc[row_idx, 'pyrocko_phase_time'] = phase_time
                     pndting_df.loc[row_idx, 'pyrocko_polarity'] = polarity
 
-        return pndting_df
+        return pndting_df #, event_data
 
 
 # ==================================================================================================
