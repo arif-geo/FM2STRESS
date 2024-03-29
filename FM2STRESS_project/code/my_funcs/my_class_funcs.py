@@ -6,6 +6,7 @@ from obspy import read, UTCDateTime, Stream, Inventory
 from geopy.distance import geodesic
 import tensorflow as tf
 from keras import backend as K # for custom loss function
+import matplotlib.pyplot as plt
 
 from tqdm.auto import tqdm
 from multiprocessing import Pool
@@ -188,16 +189,308 @@ class WaveformParallelDownloader:
 
 
 # ==================================================================================================
-# WAVEFORM PLOTTER CLASS
+#                                   WAVEFORM PLOTTER CLASS
 # ==================================================================================================
 
 class WaveformPlotter:
     """
 
     """
-    def __init__(self):
-        pass
+    def __init__(self,
+                 mseed_file=None,
+                 pol_df=None,
+                 waveform_dir=None
+                 ):
+        self.mseed_file = mseed_file
+        self.pol_df = pol_df
+        self.waveform_dir = waveform_dir
+
+    def WFprocessing(self,
+        stn_id : str,
+        pn_pick : UTCDateTime,
+        st : Stream,
+        sli : float = 0.5,
+        normalize : bool = False,
+    ):
+        """ 
+        Check for empty trace, detrend, taper, filter.
+        Slice the trace around the PhasesNet pick.
+
+        output: trace
+        """ 
+        ist = st.select(id=stn_id)
+        tr = ist[0].copy()
+
+        # check for empty trace
+        if len(tr.data) > 0:
+            tr.detrend('demean')
+            try:
+                tr.detrend('linear')
+            except:
+                tr.detrend('constant')
+            
+            try:
+                tr.taper(0.001)
+                tr.filter('bandpass', freqmin=.1, freqmax=10, corners=4, zerophase=True)  # Apply a bandpass filter
+            except:
+                pass
+            
+            if normalize == True:
+                tr.data = tr.data/np.max(tr.data) # normalize the trace
+
+            tr = tr.slice(pn_pick - sli-0.01, pn_pick + sli) # around PhasesNet pick
+
+            return tr
+    
+    # ----------------------------------------------------------------------------------------------
+    # END of WFprocessing function
+    # ----------------------------------------------------------------------------------------------
+
+    def plotWFpick_subplots(self,
+                            mseed_file = None,
+                            pol_df = None,
+                            waveform_dir = None,
+                            n_subplots=10, 
+                            slice_len=0.5):
         
+        """ 
+        This plots each station waveform in a subplot with PhasesNet and Pyrocko picks.
+        """ 
+
+
+        # subset the df for this event only
+        event_df = pol_df[pol_df['file_name'] == mseed_file]
+
+        # check if the pyrocko col is empty or not [max should be 1]
+        if event_df['pyrocko_polarity'].max() != 1:
+            print(f'No pyrocko phase for {mseed_file}')
+            return None
+
+        ### cleanup the dataframe ###
+        # drop rows with empty pyrocko phase_time [naT] and empty phasenet phase_time
+        event_df = event_df.dropna(subset=['phase_time', 'pyrocko_phase_time']).reset_index(drop=True)
+
+        # drop rows if time difference between phasenet and pyrocko is more than 2 seconds
+        event_df['time_diff'] = (event_df['pyrocko_phase_time'] - event_df['phase_time']).dt.total_seconds()
+        event_df = event_df[event_df['time_diff'].abs() <= 2].reset_index(drop=True)
+
+        # read the mseed file
+        st = read(f'{waveform_dir}/{mseed_file}')
+
+        fig, axs = plt.subplots(n_subplots, 2, figsize=(10, 1.*n_subplots))
+
+        for i, row in event_df[0:n_subplots].iterrows():
+
+            pn_pick = UTCDateTime(pd.to_datetime(str(row['phase_time'])))
+            pr_pick = UTCDateTime(pd.to_datetime(str(row['pyrocko_phase_time'])))
+            
+            stn_id = f'{row.station_id}Z'
+
+            # use the WFprocessing function to get the trace
+            tr = self.WFprocessing(stn_id, pn_pick, st, slice_len)
+
+            if not len(tr.data) > 0: # check if the trace is empty
+                continue
+
+            # Generate time axis as a numpy array
+            times = np.linspace(0, tr.stats.npts / tr.stats.sampling_rate, tr.stats.npts)
+
+            # get the pick time from starttime into ms
+            pn_pick_time = (pn_pick - tr.stats.starttime)
+            pr_pick_time = (pr_pick - tr.stats.starttime)
+            
+            # get polarity
+            dting_pol = row.diting_polarity
+            dting_sharp = row.diting_sharpness
+            prk_pol = row.pyrocko_polarity
+
+            # easier subplot axes
+            ax1, ax2 = axs[i, 0], axs[i, 1]
+
+
+            ###### COLUMN 1: PhasesNet pick, DiTing polarity ######
+            #######################################################
+            # plot the waveform
+            ax1.plot(times, tr.data, 'k') 
+
+            # PhasesNet pick  
+            ax1.axvline(x=pn_pick_time, color='r', linestyle='--')  
+
+            # DiTing Polarity and sharpness
+            ax1.text(
+                pn_pick_time-0.2, tr.data.max()*0.5, 
+                f"{dting_pol} / {dting_sharp}", 
+                fontsize=12, color='b', ha='left')
+            
+            # Title [station_id] and horizontal line at 0
+            ax1.set_title(
+                f"{tr.id}",loc='left', 
+                x=0.01, y=0.6, 
+                fontsize=10,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.5, pad=0.1))
+
+            # Horizontal line at 0
+            ax1.axhline(y=0, color='k', lw=0.5)
+
+            # hide x tick labels for this column except the last one
+            if i != n_subplots-1:
+                ax1.set_xticklabels([])
+                ax1.set_xticks([])
+
+            # ax1.spines['right'].set_visible(False)
+
+
+            ###### COLUMN 2: Pyrocko pick, Pyrocko polarity ######
+            #######################################################
+            ax2.plot(times, tr.data, 'k')
+            ax2.axvline(x=pr_pick_time, color='b', linestyle='--')           # Pyrocko pick [manual + phasenet]
+            ax2.text(
+                pn_pick_time-0.25, tr.data.max()*0.5,
+                f"{'U' if prk_pol == 1 else 'D'}", 
+                fontsize=12, color='r',) # polarity
+
+            # horizontal line at 0
+            ax2.axhline(y=0, color='k', lw=0.5)
+            # hide x and y axis tick labels for this column
+            ax2.set_yticklabels([])
+            # move y axis ticks to the right
+            ax2.yaxis.tick_right()
+            if i != n_subplots-1:
+                ax2.set_xticklabels([])
+                ax2.set_xticks([])
+            
+            # # hide the left spine
+            # ax2.spines['left'].set_visible(False)
+
+        # add one title for each column
+        axs[0, 0].set_title('PhasesNet and DiTingMotion', fontsize=14)
+        axs[0, 1].set_title('Pyrocko and Phasenet', fontsize=14)
+
+        # axis titles for the whole figure
+        fig.text(0.5, -0.01, 'Time [s]', ha='center', fontsize=14)
+        fig.text(-0.01, 0.5, 'Amplitude', va='center', rotation='vertical', fontsize=14)
+
+        fig.subplots_adjust(wspace=0.1)
+        fig.tight_layout()     
+
+        return fig, axs
+
+    # ----------------------------------------------------------------------------------------------
+    # END of plotWFpick_subplots function
+    # ----------------------------------------------------------------------------------------------
+
+    def plotWFpick_oneplot(self,
+                        mseed_file = None,
+                        pol_df = None,
+                        waveform_dir = None,
+                        n_subplots=10, 
+                        slice_len=0.5,
+                        zoom=3,
+                        normalize: bool = True,
+                        hor_line: bool = True,
+                        ):
+
+        # subset the df for this event only
+        event_df = pol_df[pol_df['file_name'] == mseed_file]
+
+        # check if the pyrocko col is empty or not [max should be 1]
+        if event_df['pyrocko_polarity'].max() != 1:
+            print(f'No pyrocko phase for {mseed_file}')
+            return None
+
+        ### cleanup the dataframe ###
+        # drop rows with empty pyrocko phase_time [naT] and empty phasenet phase_time
+        event_df = event_df.dropna(subset=['phase_time', 'pyrocko_phase_time']).reset_index(drop=True)
+
+        # drop rows if time difference between phasenet and pyrocko is more than 2 seconds
+        event_df['time_diff'] = (event_df['pyrocko_phase_time'] - event_df['phase_time']).dt.total_seconds()
+        event_df = event_df[event_df['time_diff'].abs() <= 2].reset_index(drop=True)
+
+        # read the mseed file
+        st = read(f'{waveform_dir}/{mseed_file}')
+
+        fig, axs = plt.subplots(1, 2, figsize=(10, 6))
+        ax1, ax2 = axs
+
+        if n_subplots == 'all':
+            n_subplots = len(event_df)
+            
+        for i, row in event_df[0:n_subplots].iterrows():
+
+            # get the pick times (PhasesNet and Pyrocko)
+            pn_pick = UTCDateTime(pd.to_datetime(str(row['phase_time'])))
+            pr_pick = UTCDateTime(pd.to_datetime(str(row['pyrocko_phase_time'])))
+            
+            # get the trace for this station
+            stn_id = f'{row.station_id}Z'
+
+            # Process the waveform using the WFprocessing function
+            tr = self.WFprocessing(stn_id, pn_pick, st, slice_len, normalize)
+            
+            if not len(tr.data) > 0: # check if the trace is empty
+                continue
+        
+            # Generate time axis as a numpy array
+            times = np.linspace(0, tr.stats.npts / tr.stats.sampling_rate, tr.stats.npts) # time [s]
+
+            # get the pick time from starttime into seconds
+            pn_pick_time = ((pn_pick - tr.stats.starttime)) 
+            pr_pick_time = ((pr_pick - tr.stats.starttime)) 
+            
+            # get polarity
+            dting_pol = row.diting_polarity
+            dting_sharp = row.diting_sharpness
+            prk_pol = row.pyrocko_polarity
+            
+            ###### COLUMN 1: PhasesNet pick, DiTing polarity ######
+            #######################################################
+            ax1.plot(times, tr.data*zoom + i, 'k')     # plot the waveform
+            ax1.plot([pn_pick_time, pn_pick_time], [i-0.8, i+0.8], color='r', ls='--')      # PhasesNet pick
+            # Polarity and sharpness (DiTing)
+            ax1.text(
+                pn_pick_time-0.15, i + 0.5, 
+                f"{dting_pol} / {dting_sharp}", 
+                fontsize=12, color='b', ha='left')
+
+            # title [station_id] and horizontal line at 0
+            ax1.text( 
+                pn_pick_time-0.5,
+                i - 0.3, 
+                f"{tr.id}",
+                fontsize=8)
+                
+
+            ###### COLUMN 2: Pyrocko pick, Pyrocko polarity ######
+            #######################################################
+            ax2.plot(times, tr.data * zoom +i, 'k')    # plot the waveform
+            ax2.plot([pr_pick_time, pr_pick_time], [i-0.8, i+0.8], color='b', ls='--')   # Pyrocko pick [manual + phasenet]
+            # Polarity (Pyrocko)
+            ax2.text(
+                pn_pick_time-0.25,  i + 0.5,
+                f"{'U' if prk_pol == 1 else 'D'}", 
+                fontsize=12, color='r',)
+
+            ## Optional plotting parameters ##
+            if hor_line:
+                ax1.plot([0, 1], [i, i], color='k', lw=0.5)
+                ax2.plot([0, 1], [i, i], color='k', lw=0.5)
+
+
+        # # add one title for each column
+        ax1.set_title('PhasesNet and DiTingMotion', fontsize=14)
+        ax2.set_title('Pyrocko and Phasenet', fontsize=14)
+        
+        # plot axes (one for both columns)
+        ax1.set_ylabel('Amplitude', fontsize=12)
+        plt.xlabel('Time [s]',x=-.05, y=0.01, fontsize=12)
+
+        return fig, axs
+
+    # ----------------------------------------------------------------------------------------------
+    #   END of plotWFpick_oneplot function
+    # ----------------------------------------------------------------------------------------------
+
+
     def read_phasenet_event_picks(self):
         """
         Read the phasenet csv file and return a pandas dataframe with picks information
@@ -226,7 +519,7 @@ class WaveformPlotter:
 
 
 # ==================================================================================================
-# FILE CONVERTER CLASS
+#                                       FILE CONVERTER CLASS
 # ==================================================================================================
 
 class MyFileConverter:
