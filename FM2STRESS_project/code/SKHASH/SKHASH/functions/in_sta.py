@@ -86,7 +86,7 @@ def read_hash3_station_file(stfile):
 
     return station_df
 
-def read_hash4_station_file(stfile):
+def read_hash4_station_file(stfile): 
     '''
     Reads input station file following the (newer) SCEDC format used for HASH Driver 4.
     '''

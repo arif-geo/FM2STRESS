@@ -1,7 +1,9 @@
 #!/bin/bash
+cd /Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../code/SKHASH/SKHASH
 
-# Change directory into PhaseNet
-cd /Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/earth_sci_data_analysis_arif/Final_project/code/SKHASH/SKHASH
+# Activate conda pythoon environment named 'phasenet' [********change miniconda3 to anaconda3 if using Anaconda]
+source ~/miniconda3/etc/profile.d/conda.sh # or source ~/anaconda3/etc/profile.d/conda.sh in case of Anaconda
+# conda init
+conda activate obspy
 
-# Run SKHASH
-python3 SKHASH.py     examples/maacama_SKHASH_MTJ/control_file.txt 
+python3 SKHASH.py examples/maacama_SKHASH_MTJ/control_test.txt

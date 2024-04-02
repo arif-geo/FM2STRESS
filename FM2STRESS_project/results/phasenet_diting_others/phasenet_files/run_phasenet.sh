@@ -18,11 +18,8 @@ python phasenet/predict.py \
   --batch_size=1 \
   --sampling_rate=100 \
   --result_dir=/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/phasenet_diting_others/phasenet_files \
-  --result_fname=phasenet_phasepick_3d_grid \
-  --min_p_prob=0.75 \
-  --min_s_prob=0.85 \
-  # --add_polarity \
-  # --plot_figure
+  --result_fname=phasenet_phasepick_3d_grid_new\
+  --min_s_prob=0.95 \
 
 # Deactivate virtual environment (optional)
 # conda deactivate

@@ -54,6 +54,7 @@ def plot_mech(mech_df,pol_df,takeoff,azimuth,save_folderpath):
     ## Plots Up/Down polarities
     if len(up_ind)>0:
         axes[0].scatter(xy[up_ind,0],xy[up_ind,1],marker='+',s=50, linewidths=.6, c='k',zorder=2)
+        # axes[0].text(xy[up_ind,0],xy[up_ind,1],station_names[up_ind],fontsize=8,ha='center',va='center',zorder=3)
     if len(down_ind)>0:
         axes[0].scatter(xy[down_ind,0],xy[down_ind,1],marker='o',s=50, linewidths=.5, edgecolor='k', facecolor='None',zorder=2)
 

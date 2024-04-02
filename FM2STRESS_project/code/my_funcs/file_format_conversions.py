@@ -74,76 +74,7 @@ def pyrocko_marker2skhash_pol(markerfile_path, output_path='.'):
 #
 #################################################
 
-"""
-**pyrocko marker to skshash pol_concensus for individual event marker file.
-This is my old  filing system. I make 1 marker file for one event. Now, i have a master marker file for all events.**
-"""
-def make_skhash_polarity_file(markerfile_path, catalog_path, output_path):
-    ##### old #####
-    """
-    This function creates a polarity file for SKHASH format input data
-    input: 
-        markerfile_path: path to the markerfile [master marker file]
-        catalog_path: path to the catalog file [master catalog file]
-    output:
-        pol_consensus.csv file written to ouput folder
-    """
 
-    # create an empty dataframe with column names:
-    # [event_id,event_id2,station,location,channel,p_polarity,origin_latitude,origin_longitude,origin_depth_km]
-    pol_df = pd.DataFrame()
-
-    # loop over each event_id
-    for i, event_id in enumerate(event_ids):
-
-        # read the picks.txt file
-        # col4 has NN.SSSSS.LL.CCC format (network.station.location.channel)
-        picks_df = pd.read_csv(
-            f"{data_path}/{event_id}/event_{event_id}_picks.txt",
-            skiprows=1,         # skip the first row
-            sep='\s+',          # delimiter
-            header=None,        # no header
-            usecols=[4,8,9],    # only read columns 4,8,9,
-            names=['stns', 'phase', 'polarity']
-            )
-        # get 'origin_latitude','origin_longitude','origin_depth_km' from original catalog file
-        ## or we can also use best_location file we created using misfit calculation
-        catalog_df = pd.read_csv(catalog_path, sep=',', header=0, 
-                                usecols=['latitude','longitude','depth', 'id'],
-                                )
-        catalog_df = catalog_df[catalog_df['id'] == event_id]
-
-        # create a temporary dataframe with columns [event_id,event_id2,station,location,channel,p_polarity]
-        temp_df = pd.DataFrame(columns=['event_id','event_id2','station','location','channel','p_polarity'])
-        
-        temp_df['station'] = picks_df['stns'].str.split('.').str[1]
-        temp_df['location'] = picks_df['stns'].str.split('.').str[2]
-        temp_df['location'].replace('', '--', inplace=True)
-
-        temp_df['channel'] = picks_df['stns'].str.split('.').str[3]
-        temp_df['p_polarity'] = picks_df['polarity']
-        temp_df['event_id'] = event_id
-        temp_df['event_id2'] = i+1
-        temp_df['origin_latitude'] = format(catalog_df['latitude'].values[0], '.5f')
-        temp_df['origin_longitude'] = format(catalog_df['longitude'].values[0], '.5f')
-        temp_df['origin_depth_km'] = catalog_df['depth'].values[0]
-
-        # append the temp_df to pol_df
-        pol_df = pd.concat([pol_df, temp_df], ignore_index=True)
-
-        # drop rows with nan values in p_polarity column
-        pol_df.dropna(subset=['p_polarity'], inplace=True)
-        
-
-    # write the pol_df dataframe to a csv file
-    print(f"{'='*10} Writing the `pol_consensus.csv` file to {output_path}")
-    pol_df.to_csv(f'{output_path}/pol_consensus.csv', index=False)
-
-############ END OF FUNCTION ####################
-#
-############ MAKE SKHAH STATION FILE ############
-#
-#################################################
 
 def make_skhash_station_file(
     output_path=None,
@@ -268,3 +199,79 @@ def make_skhash_reverse_file(polarity_file, output_path=None):
     # print(f"{'='*10} Writing the `reverse.txt` file to {output_path}")
     # reverse_df.to_csv(f'{output_path}/reverse.csv', index=False)
     return reverse_df
+
+
+########################################################################################
+                                ##### old #####
+"""
+**pyrocko marker to skshash pol_concensus for individual event marker file.
+This is my old  filing system. I make 1 marker file for one event. Now, i have a master marker file for all events.**
+"""
+########################################################################################
+
+def make_skhash_polarity_file(markerfile_path, catalog_path, output_path):
+    
+    """
+    This function creates a polarity file for SKHASH format input data
+    input: 
+        markerfile_path: path to the markerfile [master marker file]
+        catalog_path: path to the catalog file [master catalog file]
+    output:
+        pol_consensus.csv file written to ouput folder
+    """
+
+    # create an empty dataframe with column names:
+    # [event_id,event_id2,station,location,channel,p_polarity,origin_latitude,origin_longitude,origin_depth_km]
+    pol_df = pd.DataFrame()
+
+    # loop over each event_id
+    for i, event_id in enumerate(event_ids):
+
+        # read the picks.txt file
+        # col4 has NN.SSSSS.LL.CCC format (network.station.location.channel)
+        picks_df = pd.read_csv(
+            f"{data_path}/{event_id}/event_{event_id}_picks.txt",
+            skiprows=1,         # skip the first row
+            sep='\s+',          # delimiter
+            header=None,        # no header
+            usecols=[4,8,9],    # only read columns 4,8,9,
+            names=['stns', 'phase', 'polarity']
+            )
+        # get 'origin_latitude','origin_longitude','origin_depth_km' from original catalog file
+        ## or we can also use best_location file we created using misfit calculation
+        catalog_df = pd.read_csv(catalog_path, sep=',', header=0, 
+                                usecols=['latitude','longitude','depth', 'id'],
+                                )
+        catalog_df = catalog_df[catalog_df['id'] == event_id]
+
+        # create a temporary dataframe with columns [event_id,event_id2,station,location,channel,p_polarity]
+        temp_df = pd.DataFrame(columns=['event_id','event_id2','station','location','channel','p_polarity'])
+        
+        temp_df['station'] = picks_df['stns'].str.split('.').str[1]
+        temp_df['location'] = picks_df['stns'].str.split('.').str[2]
+        temp_df['location'].replace('', '--', inplace=True)
+
+        temp_df['channel'] = picks_df['stns'].str.split('.').str[3]
+        temp_df['p_polarity'] = picks_df['polarity']
+        temp_df['event_id'] = event_id
+        temp_df['event_id2'] = i+1
+        temp_df['origin_latitude'] = format(catalog_df['latitude'].values[0], '.5f')
+        temp_df['origin_longitude'] = format(catalog_df['longitude'].values[0], '.5f')
+        temp_df['origin_depth_km'] = catalog_df['depth'].values[0]
+
+        # append the temp_df to pol_df
+        pol_df = pd.concat([pol_df, temp_df], ignore_index=True)
+
+        # drop rows with nan values in p_polarity column
+        pol_df.dropna(subset=['p_polarity'], inplace=True)
+        
+
+    # write the pol_df dataframe to a csv file
+    print(f"{'='*10} Writing the `pol_consensus.csv` file to {output_path}")
+    pol_df.to_csv(f'{output_path}/pol_consensus.csv', index=False)
+
+############ END OF FUNCTION ####################
+#
+############ MAKE SKHAH STATION FILE ############
+#
+#################################################
