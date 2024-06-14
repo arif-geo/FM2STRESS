@@ -2,3 +2,10 @@
 *.mseed
 *.sac
 *.xml
+nc*.txt
+*.grd
+FM2STRESS_project/code/QuakeFlow
+FM2STRESS_project/data/EQNet-master
+FM2STRESS_project/data/eq_data
+FM2STRESS_project/code/DiTing-FOCALFLOW
+FM2STRESS_project/results/foc_mech/NCEDC_comp/*/*/nc*.png

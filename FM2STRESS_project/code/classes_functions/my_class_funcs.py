@@ -4,188 +4,18 @@ import pandas as pd
 from obspy.clients.fdsn import Client
 from obspy import read, UTCDateTime, Stream, Inventory
 from geopy.distance import geodesic
-import tensorflow as tf
-from keras import backend as K # for custom loss function
 import matplotlib.pyplot as plt
 
+import tensorflow as tf
+from keras import backend as K # for custom loss function
+# from tensorflow.keras import backend as K
+
 from tqdm.auto import tqdm
+import multiprocessing
 from multiprocessing import Pool
 from concurrent.futures import ProcessPoolExecutor
-import joblib 
 import logging
-
-
-class WaveformParallelDownloader:
-    def __init__(self, 
-                 starttime, endtime, 
-                 minlon=-125.5, maxlon=-122, 
-                 minlat=39.5, maxlat=42,
-                 client_list=['IRIS', 'NCEDC'],  
-                 priority_channels=['HH*', 'BH*', 'HN*', 'EH*']
-                ):
-        """
-        Initialize the class with the following parameters:
-        Mandatory arguments:
-            starttime, endtime: UTCDateTime objects
-        Optional arguments:
-            minlon, maxlon, minlat, maxlat: float
-            client_list: list of strings
-            priority_channels: list of strings
-        """
-
-        self.starttime = starttime
-        self.endtime = endtime
-        self.minlon = minlon
-        self.maxlon = maxlon
-        self.minlat = minlat
-        self.maxlat = maxlat
-        self.client_list = client_list
-        self.priority_channels = priority_channels
-        self.success_stn = []
-
-        # create a logger
-        self.logger = logging.getLogger(__name__)                                              # create logger
-        self.logger.setLevel(logging.INFO)                                                     # set logger level
-        os.remove('waveform_parallel_downloader.log') if os.path.exists('waveform_parallel_downloader.log') else None
-        file_handler = logging.FileHandler('waveform_parallel_downloader.log')                 # create file handler
-        file_handler.setLevel(logging.INFO)                                                    # set file handler level
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')  # create formatter
-        file_handler.setFormatter(formatter)                                                   # set formatter
-        self.logger.addHandler(file_handler)                                                   # add file handler to logger
-
-
-    def get_station_inventory(self, starttime, endtime):
-
-        """
-        Get station inventory for a specific time period.
-        mandatory arguments:
-            starttime, endtime: UTCDateTime objects
-
-        optional arguments:
-            minlon, maxlon, minlat, maxlat: float
-            client_list: list of strings
-            priority_channels: list of strings
-        
-        returns:
-            inventory: obspy Inventory object
-        """
-
-        inventory = Inventory()
-
-        for client_name in self.client_list:
-            client = Client(client_name, debug=False, timeout=60)
-            try:
-                temp_inv = client.get_stations(
-                    network="*", station="*", location="*",              
-                    channel = ",".join(self.priority_channels), # convert ['HH*', 'BH*', 'HN*', 'EH*'] into 'HH*,BH*,HN*,EH*' [srting]
-                    starttime=self.starttime, endtime=self.endtime,
-                    minlatitude=self.minlat, maxlatitude=self.maxlat,
-                    minlongitude=self.minlon, maxlongitude=self.maxlon,
-                    level="channel"
-                )
-                # merge inventories
-                inventory.networks.extend(temp_inv.networks)
-
-            except Exception as e:
-                self.logger.error(f"Error fetching data from {client_name}: {e}")
-                continue
-
-        return inventory
-
-
-    # ==================================================================================================
-
-    def get_waveforms_parallel(self):
-        """
-        Arranges all arguments for each station to download waveforms and distributes the work to each core.
-        Actual download is done by `download_event_waveforms` function.
-        """
-        st = Stream()
-        inv = Inventory() # stations with successful downloads
-
-        # Get station inventory
-        inventory = self.get_station_inventory(self.starttime, self.endtime)
-        
-        # Prepare arguments for download_station function
-        args_list = []
-        for client_name in self.client_list:
-            client = Client(client_name, debug=False, timeout=30)
-
-            for network in inventory.networks:
-                for station in network.stations:
-                    args_list.append((client, network, station, self.priority_channels, self.starttime, self.endtime, self.success_stn))
-
-        # Parallelize the loop over stations
-        #get core count
-        core_count = os.cpu_count() - 1 # leave one core for other processes
-        pool = Pool(core_count) # use all available cores
-
-        with tqdm(total=len(args_list), disable=True) as pbar:
-            for temp_st, temp_inv in pool.imap_unordered(self.download_station, args_list):
-                pbar.update(1) # update progress bar for each station
-                st += temp_st
-                inv.networks.extend(temp_inv.networks)
-
-        # Wait for all tasks to finish
-        pool.close()
-        pool.join()
-
-        return st, inv        
-
-    # ==================================================================================================
-
-    def download_station(self, args):
-        """
-        Download waveforms for a single station.
-        """
-        client, network, station, priority_channels, starttime, endtime, success_stn = args
-        st_local = Stream()
-        inv_local = Inventory()
-
-        for priority_channel in priority_channels:
-            ch_list = list(set([ch.code[0:2] for ch in station.channels])) # list(set()) removes duplicates
-            if priority_channel[0:2] not in ch_list:
-                continue
-
-            # check if this station has already been downloaded for a priority channel
-            # if #1 (HH*) is downloaded, skip #2 (BH*) etc.
-            if station.code in success_stn:
-                break
-            try:
-                # print(f'{network.code}.{station.code}.{priority_channel}_{starttime}_{endtime}')
-                temp_st = client.get_waveforms(
-                    network=network.code,
-                    station=station.code,
-                    location="*",
-                    channel=priority_channels,
-                    starttime=starttime,
-                    endtime=endtime,
-                )
-
-                temp_inv = client.get_stations(
-                    network=network.code,
-                    station=station.code,
-                    location="*",
-                    channel=priority_channels,
-                    starttime=starttime,
-                    endtime=endtime,
-                    level="channel"
-                )
-
-                # if station.code not in success_stn:
-                success_stn.append(station.code)
-                st_local += temp_st
-                inv_local.networks.extend(temp_inv.networks)
-
-                # Break the loop if the right channel is found
-                break
-
-            except Exception as e:
-                # self.logger.error(f"failed: {network.code}.{station.code}.{priority_channel}")
-                pass
-                
-
-        return st_local, inv_local
+import pdb
 
 
 # ==================================================================================================
@@ -213,6 +43,8 @@ class WaveformPlotter:
         pn_pick : UTCDateTime,
         st : Stream,
         sli : float = 0.5,
+        freqmin=1.5, 
+        freqmax=10,
         normalize : bool = False,
     ):
         """ 
@@ -222,6 +54,7 @@ class WaveformPlotter:
         output: trace
         """ 
         ist = st.select(id=stn_id)
+        ist.resample(100) # resample to 100 Hz
         tr = ist[0].copy()
 
         # check for empty trace
@@ -234,20 +67,21 @@ class WaveformPlotter:
             
             try:
                 tr.taper(0.001)
-                tr.filter('bandpass', freqmin=.1, freqmax=10, corners=4, zerophase=True)  # Apply a bandpass filter
+                tr.filter('bandpass', freqmin=freqmin, freqmax=freqmax, corners=4, zerophase=True)  # Apply a bandpass filter
             except:
                 pass
             
             if normalize == True:
                 tr.data = tr.data/np.max(tr.data) # normalize the trace
 
-            tr = tr.slice(pn_pick - sli-0.01, pn_pick + sli) # around PhasesNet pick
+            tr = tr.slice(pn_pick - (sli-0.01), pn_pick + sli) # around PhasesNet pick
 
             return tr
 
     # .............................. SUB-FUNCTION .................................................
+    # ................. process_df_subset function ...............................................
 
-    def process_df_subset(self, mseed_file, pol_df, sort_by=None):
+    def process_df_subset(self, mseed_file, pol_df, sort_by=None, pyrocko_col=True):
 
         """
         Process the dataframe for a single event.
@@ -286,6 +120,7 @@ class WaveformPlotter:
         return event_df
 
     # . . . . . . . . . . . . . . SUB-FUNCTION . . . . . . . . . . . . . . . . . . . . . . . . 
+    # . . . . . . . . get_trace2plot function ...............................................
 
     def get_trace2plot(self, row, st, slice_len, normalize,
                         ):
@@ -301,11 +136,11 @@ class WaveformPlotter:
         # get the trace for this station
         stn_id = f'{row.station_id}Z'
 
-        # Process the waveform using the WFprocessing function
+        # Process the trace using the WFprocessing function
         tr = self.WFprocessing(stn_id, pn_pick, st, slice_len, normalize)
         
         if not len(tr.data) > 0: # check if the trace is empty
-            return None
+            return None, None, None, None, None, None, None
     
         # Generate time axis as a numpy array
         times = np.linspace(0, tr.stats.npts / tr.stats.sampling_rate, tr.stats.npts) # time [s]
@@ -390,7 +225,7 @@ class WaveformPlotter:
             ax2.axvline(x=pr_pick_time, color='b', linestyle='--')           # Pyrocko pick [manual + phasenet]
             ax2.text(
                 pn_pick_time-0.25, tr.data.max()*0.5,
-                f"{'U' if prk_pol == 1 else 'D'}", 
+                int(prk_pol) if not np.isnan(prk_pol) else prk_pol,
                 fontsize=12, color='r',) # polarity
 
             # move y axis ticks to the right
@@ -409,11 +244,11 @@ class WaveformPlotter:
            
         # add one title for each column
         axs[0, 0].set_title('PhasesNet and DiTingMotion', fontsize=14)
-        axs[0, 1].set_title('Pyrocko and Phasenet', fontsize=14)
+        axs[0, 1].set_title('Pyrocko Handpicked', fontsize=14)
 
         # axis titles for the whole figure
         fig.text(0.5, 0.04, 'Time [s]', ha='center', fontsize=14)
-        fig.text(0.04, .5, 'Amplitude', va='center', rotation='vertical', fontsize=14)
+        fig.text(0.04, .5, f'{"Normalized" if normalize==True else ""} Amplitude', va='center', rotation='vertical', fontsize=14)
         
         axs = axs.flatten()
         # # hide axis spines
@@ -428,7 +263,8 @@ class WaveformPlotter:
         if hor_line:
             for ax in axs:
                 ax.axhline(y=0, color='k', lw=0.5)
-
+        # hide y axis labels for all subplots
+        plt.setp(axs, yticks=[])
 
         # fig.subplots_adjust(wspace=0.1)
         # fig.tight_layout()     
@@ -461,13 +297,16 @@ class WaveformPlotter:
         fig, axs = plt.subplots(1, 2, figsize=figsize)
         ax1, ax2 = axs
 
-        if n_subplots == 'all':
+        if n_subplots == 'all' or n_subplots > len(event_df):
             n_subplots = len(event_df)
 
 
         for i, row in event_df[0:n_subplots].iterrows():
             # prepare the trace for plotting with PhasesNet and Pyrocko picks and polarities
             tr, times, pn_pick_time, pr_pick_time, dting_pol, dting_sharp, prk_pol = self.get_trace2plot(row, st, slice_len, normalize)
+
+            if tr is None: # skip if the trace is empty
+                continue
 
             # variable zoom using spread of the data
             spread = np.std(tr.data)          
@@ -518,236 +357,9 @@ class WaveformPlotter:
 
         return fig, axs
 
-    # ..............................................................................................
-    #                   -- function
-    # .............................................................................................. 
-
-    def read_phasenet_event_picks(self):
-        """
-        Read the phasenet csv file and return a pandas dataframe with picks information
-        for a single event.
-        """
-        # call a function from the MyFileReader class
-        pass
-
-    def get_event2station_distance(self):
-        """
-        Calculate the distance between the event and each station.
-        """
-        pass
-
-    def plot_event_waveforms_dist(self):
-        """
-        Plot waveforms for each station for a single event.
-        """
-        pass
-
-    def plot_FMP_pick(self):
-        """
-        Plot the FMP pick on the zoomed-in waveforms vs relative time [i.e. same start and end time for all stations]
-        """
-        pass
-
-
-# ==================================================================================================
-#                                       FILE CONVERTER CLASS
-# ==================================================================================================
-
-class MyFileConverter:
-    """
-    Class to convert files from one format to another.
-    """
-    def __init__(self):
-        pass
     
-    # ..............................................................................................
-    #                   PYROCKO MARKER FILE TO PHASENET PICKS
-    # ..............................................................................................
-
-    def convert_pyrocko_picks_to_phasenet(self, pyrocko_markers, phasenet_diting_picks):
-        """
-        Convert pyrocko picks to phasenet format.
-        """
-        # read phasenet picks
-        pndting_df = pd.read_csv(phasenet_diting_picks, parse_dates=["begin_time", "phase_time"])
-        
-        ## test subset \\\\\\\\\\\\\\\\\\\\\\     REMOVE THIS LATER //////////////////////////
-        # pndting_df = pndting_df[pndting_df.file_name == 'nc71993336.mseed']
-
-
-        # create new columns for pyrocko picks
-        pndting_df['pyrocko_phase_time'], pndting_df['pyrocko_polarity'] = None, None
-
-        # read pyrocko marker file
-        with open(pyrocko_markers, 'r') as f:
-            lines = f.readlines()[1:]                               # skip 1st line
-            lines = lines[:-1] if len(lines[-1]) == 0 else lines    # remove the last line if it is empty
-            total_lines = len(lines)
-
-            current_event = None # key for the dictionary
-            current_phases = []  # list as value for the dictionary
-            event_data = {}      # dictionary to store the event data
-
-            for i, line in enumerate(lines):
-                line = line.strip().split()
-                
-                if line[0] == 'event:': # get event details
-                    if current_event is not None:
-                        # when a new event is found, store the previous event data
-                        event_data[current_event] = current_phases
-                        # print(current_event)
-                        
-                    current_event = line[-2]
-                    current_phases = []       # reset the list for new event
-
-                elif line[0] == 'phase:':
-                    phase_type = line[-3]
-                    if phase_type != 'P':
-                        continue
-                    station_id_xx = line[4][:-1]
-                    phase_time = line[1]+"T"+line[2]
-                    polarity = line[-2]
-                    
-                    # append the phase details to the list for the current event
-                    current_phases.append([station_id_xx, phase_time, phase_type, polarity])
-
-                    # if this is the last line, store the event data
-                    if i == total_lines - 1:
-                        event_data[current_event] = current_phases
-                    
-        new_row_count = 0
-        for event_id, phase_data in event_data.items():
-            evfile_name = f"{event_id}.mseed"
-
-            for station_id_xx, phase_time, phase_type, polarity in phase_data:
-                
-
-                # get the row index of the phasenet-diting dataframe by matching the event_id and station_id_xx
-                stn_rows = pndting_df[
-                    (pndting_df.file_name == evfile_name) &
-                    (pndting_df.station_id == station_id_xx)
-                    & (pndting_df.phase_type == phase_type) # check if the phase type is P (optional)
-                    ].index
-                                
-                if len(stn_rows) > 0:
-                    row_idx = stn_rows[0]
-                    pndting_df.loc[row_idx, 'pyrocko_phase_time'] = phase_time
-                    pndting_df.loc[row_idx, 'pyrocko_polarity'] = polarity
-
-                # if PhaseNet did not pick this station, then insert a new row to add the pyrocko manual pick data
-                elif len(stn_rows) == 0 and polarity in [-1, 1]: # i.e. this row is not in the dataframe, so add it
-                    new_row_dict = {
-                        'file_name': evfile_name,
-                        'station_id': station_id_xx,
-                        'phase_type': phase_type,
-                        'pyrocko_phase_time': phase_time,
-                        'pyrocko_polarity': polarity,
-                    }
-                    new_row = pd.DataFrame([new_row_dict])
-                    if not new_row.empty and not new_row.isna().all().all():
-                        pndting_df = pd.concat([pndting_df, new_row], ignore_index=True)
-                        print(new_row)
-                        new_row_count += 1
-                else:
-                    print(f"Skipping {station_id_xx}|{evfile_name}|{phase_type}|{polarity}")
-        print(f"Added {new_row_count} new rows to the dataframe.")
-
-        return pndting_df #, event_data
-
-    # ..............................................................................................
-    #                   PYROCKO MARKER FILE TO PHASENET PICKS [VERSION 2]
-    # ..............................................................................................
-
-    def convert_pyrocko_picks_to_phasenet2(self, pyrocko_markers, phasenet_diting_picks):
-        """
-        Convert pyrocko picks to phasenet format.
-        """
-        # read phasenet picks
-        pndting_df = pd.read_csv(phasenet_diting_picks, parse_dates=["begin_time", "phase_time"])
-
-        # create new columns for pyrocko picks
-        pndting_df['pyrocko_phase_time'], pndting_df['pyrocko_polarity'] = None, None
-
-        # read pyrocko marker file
-        with open(pyrocko_markers, 'r') as f:
-            lines = f.readlines()[1:]                               # skip 1st line
-            lines = lines[:-1] if len(lines[-1]) == 0 else lines    # remove the last line if it is empty
-            total_lines = len(lines)
-
-            current_event = None # key for the dictionary
-            current_phases = []  # list as value for the dictionary
-            event_data = {}      # dictionary to store the event data
-
-            for i, line in enumerate(lines):
-                line = line.strip().split()
-                
-                if line[0] == 'event:': # get event details
-                    if current_event is not None:
-                        # when a new event is found, store the previous event data
-                        event_data[current_event] = current_phases
-                        # print(current_event)
-                        
-                    current_event = line[-2]
-                    current_phases = []       # reset the list for new event
-
-                elif line[0] == 'phase:':
-                    phase_type = line[-3]
-                    if phase_type != 'P':
-                        continue
-                    station_id_xx = line[4][:-1]
-                    phase_time = line[1]+"T"+line[2]
-                    polarity = line[-2]
-                    
-                    # append the phase details to the list for the current event
-                    current_phases.append([station_id_xx, phase_time, phase_type, polarity])
-
-                    # if this is the last line, store the event data
-                    if i == total_lines - 1:
-                        event_data[current_event] = current_phases
-                    
-        new_row_count, skipped_row_count = 0, 0
-        for event_id, phase_data in event_data.items():
-            evfile_name = f"{event_id}.mseed"
-            
-            # subset the dataframe for this event only
-            event_df = pndting_df[pndting_df['file_name'] == evfile_name]
-
-            for station_id_xx, phase_time, phase_type, polarity in phase_data:
-                # print(type(station_id_xx), type(evfile_name), type(phase_type), type(phase_time), type(polarity))
-                # Efficiently find matching rows
-                match_mask = (event_df['station_id'] == station_id_xx) & \
-                            (event_df['phase_type'] == phase_type)  # Optional matching
-
-                matching_rows = event_df[match_mask]
-
-                if not matching_rows.empty:  # At least one matching row exists 
-                    row_idx = matching_rows.index[0]
-                    pndting_df.loc[row_idx, 'pyrocko_phase_time'] = phase_time
-                    pndting_df.loc[row_idx, 'pyrocko_polarity'] = polarity
-
-                # If no match, but polarity is valid and phase_type is P, add a new row
-                elif polarity in ['-1', '1'] and phase_type == 'P':
-                    new_row_dict = {
-                        'file_name': evfile_name,
-                        'station_id': station_id_xx,
-                        'phase_type': phase_type,
-                        'pyrocko_phase_time': phase_time,
-                        'pyrocko_polarity': polarity,
-                    }
-                    new_row = pd.DataFrame([new_row_dict])
-                    if not new_row.empty and not new_row.isna().all().all():
-                        pndting_df = pd.concat([pndting_df, new_row], ignore_index=True)
-                        new_row_count += 1
-
-                else:
-                    print(f"Skipping {station_id_xx} - {evfile_name} - {phase_type} - {polarity}")
-                    skipped_row_count += 1
-
-        print(f"Added {new_row_count} new rows to the dataframe.")
-        print(f"Skipped {skipped_row_count} rows.")
-
-        return pndting_df #, event_data
-
+    # ----------------------------------------------------------------------------------------------
+    
 
 # ==================================================================================================
 # DITING-MOTION PICKER CLASS
@@ -757,28 +369,31 @@ class DitingMotionPicker:
     """
     Class run the Diting-Motion model to assign polarity to the P-wave picks.
     """
+
     def __init__(self, 
                     mseed_list=None,
                     waveform_dir=None,
                     phasenet_picks_df=None,
-                    motion_model=None
+                    motion_model=None,
+                    lensample=128,
+                    correct_pn_picks=0.0
                     ):
         
         self.mseed_list = mseed_list
         self.waveform_dir = waveform_dir
         self.phasenet_picks_df = phasenet_picks_df
         self.motion_model = motion_model
+        self.lensample = lensample
+        self.correct_pn_picks = correct_pn_picks
         # self.phasenet_picks_df = self.phasenet_picks_df 
+
 
     # ..............................................................................................
     #                   ASSIGN POLARITY USING DITING-MOTION MODEL
     # ..............................................................................................
 
     def assign_polarity(self, 
-                        mseed_list,
-                        waveform_dir,
-                        phasenet_picks_df,
-                        motion_model
+                        
                         ):
         """
         Assign polarity to the PhaseNet picks using the Diting-Motion model.
@@ -791,21 +406,31 @@ class DitingMotionPicker:
         Output:
             phasenet_picks_df: updated pandas dataframe with diting picks
         """
+        mseed_list = self.mseed_list
+        waveform_dir = self.waveform_dir
+        phasenet_picks_df = self.phasenet_picks_df
+        motion_model = self.motion_model
+
         # create output columns in the phasenet dataframe
         phasenet_picks_df['diting_polarity'], phasenet_picks_df['diting_sharpness'] = None, None
         
         # polarity dictionary [for details see below]
-        polarity_dict = {0: 'U', 1: 'D'}
-        sharpness_dict = {0: 'I', 1: 'E'}
+        polarity_dict = {0: '1', 1: '-1'} #{0: 'U', 1: 'D'}
+        sharpness_dict = {0: 'I', 1: 'E'} #{0: 'I', 1: 'E'}
 
         # create an empty array to store the motion input
-        lensample = 128
+        lensample = self.lensample
         motion_input = np.zeros([1, lensample, 2]) # 1 trace, 128 samples, 2 components
         
+        pbar = tqdm(total=len(mseed_list), desc='Polarity Detection')
+        counta = 0
+        countb = 0
         for mseed_file in (mseed_list):
             
             # read the mseed file
             st = read(f"{waveform_dir}/{mseed_file}")
+            st = st.resample(100)
+
             # phasenet picks for this event only
             temp_pn_df = phasenet_picks_df[phasenet_picks_df['file_name'] == mseed_file]
 
@@ -824,23 +449,21 @@ class DitingMotionPicker:
                     
                     try:
                         tr.taper(0.001)
-                        tr.filter('bandpass', freqmin=1, freqmax=20, corners=4, zerophase=True)
+                        tr.filter('bandpass', freqmin=1.5, freqmax=10, corners=4, zerophase=True)
                     except:
                         pass 
 
                 ##### now that we have a clean trace, we get the p_pick from the phasenet_df and cut the trace around the p_pick #####
                 # get the PhaseNet pick time
-                p_pick = UTCDateTime(pd.to_datetime(row.phase_time))
+                p_pick = UTCDateTime(pd.to_datetime(row.phase_time)) + self.correct_pn_picks
 
                 lentime = lensample/100/2
                 ### slice the trace around the p_pick
-                tr = tr.slice(p_pick - 0.63, p_pick + 0.64) # 0.63 seconds before and 0.64 seconds after the p_pick
-                # tr.plot()
-                # break
-                # print(len(tr))
-
+                tr = tr.slice(p_pick - lentime, p_pick + lentime) # 0.64s before and after the p_pick (1.28s total)
+                
+                # Due to decimal rounding, the trace length may be 129 instead of 128.
                 # check if the trace is the same length as the motion_input array
-                if len(tr) == len(motion_input[0,:,0]):
+                if len(tr.data) >= 128:
                     motion_input[0,:,0] = tr.data[0:128] # assign the trace to the motion_input array
                 
                 # normalize the data by subtracting the mean and dividing by the standard deviation
@@ -853,9 +476,12 @@ class DitingMotionPicker:
                         diff_data = np.diff(motion_input[0, 64:, 0])    # np.diff calculates the difference between each element
                         diff_sign_data = np.sign(diff_data)             # np.sign returns the sign of the difference
                         motion_input[0, 65:, 1] = diff_sign_data[:]     # assign the sign of the difference to the second component
-                
+
                         ### PREDICT using Diting-Motion model
-                        pred_res = motion_model.predict(motion_input, verbose=0) # prediction result as a dictionary
+                        pred_res = motion_model.predict(
+                            motion_input, 
+                            # verbose=0,
+                            ) # prediction result as a dictionary
                         pred_fmp = (pred_res['T0D0'] + pred_res['T0D1'] + pred_res['T0D2'] + pred_res['T0D3']) / 4 # average of the 4 classes for the first motion prediction
                         pred_cla = (pred_res['T1D0'] + pred_res['T1D1'] + pred_res['T1D2'] + pred_res['T1D3']) / 4 # average of the 4 classes for CLA(idk)
 
@@ -872,7 +498,9 @@ class DitingMotionPicker:
                         # assign the polarity to the phasenet dataframe into a new column `diting_polarity` & `diting_sharpness`
                         phasenet_picks_df.loc[index, 'diting_polarity'] = polarity
                         phasenet_picks_df.loc[index, 'diting_sharpness'] = sharpness
-
+            # break
+            pbar.update(1)
+        print(f"tr = 128: {counta}, tr = 127: {countb}")
         return phasenet_picks_df
 
 
@@ -893,19 +521,25 @@ class DitingMotionPicker:
         # create output columns in the phasenet dataframe
         self.phasenet_picks_df['diting_polarity'], self.phasenet_picks_df['diting_sharpness'] = None, None
 
-        with ProcessPoolExecutor() as executor:
+        with multiprocessing.Pool(os.cpu_count()-1) as pool:
+            print(f"Running parallel processing with {os.cpu_count()-1} cores")
             temp_dfs = list(tqdm(
-                        executor.map(
-                                self.one_event_polarity,            # function to execute
-                                self.mseed_list,                                # arg1
-                                chunksize=1), # it means that each task will be executed in a separate process
-                                total=len(self.mseed_list),
-                                desc='Polarity Detection',
-                                leave=False
-                                ))
+                pool.imap_unordered(
+                        self.one_event_polarity,            # function to execute
+                        self.mseed_list,                                # arg1
+                        chunksize=1 # it means that each task will be executed in a separate process
+                        ),
+                    total=len(self.mseed_list),
+                    desc='Polarity Detection',
+                    leave=True # progress bar leaves when done
+                    )
+                )
         
         # convert the returned lists of dataframes into a single dataframe
-        new_pn_df = pd.concat(temp_dfs, ignore_index=True)
+        new_pn_df = pd.concat(
+            temp_dfs, ignore_index=True
+            ).sort_values(by=['file_name', 'phase_score']) #, 'sta_dist_km'
+        
         return new_pn_df
 
 
@@ -921,20 +555,22 @@ class DitingMotionPicker:
         # read the mseed file
         st = read(f"{self.waveform_dir}/{mseed_file}")
 
+        # resample the trace to 100 Hz
+        st.resample(100)
+
         # polarity dictionary [for details see below]
-        polarity_dict = {0: 'U', 1: 'D'}
+        polarity_dict = {0: '1', 1: '-1'}
         sharpness_dict = {0: 'I', 1: 'E'}
 
         # create an empty array to store the motion input
-        lensample = 128
+        lensample = self.lensample
         motion_input = np.zeros([1, lensample, 2]) # 1 trace, 128 samples, 2 components
-
 
         for index, row in temp_pn_df.iterrows():
             stn_id_hh = row.station_id
             st_sel = st.select(id=f"{stn_id_hh}Z") # get the vertical component
-
             tr = st_sel[0].copy() # copy the trace
+            
             if len(tr) > 0:
                 tr.detrend('demean') # demean the trace
                 try:
@@ -943,37 +579,45 @@ class DitingMotionPicker:
                     tr.detrend(type='constant') # remove the trend
                 
                 try:
-                    tr.taper(0.001)
-                    tr.filter('bandpass', freqmin=2, freqmax=10, corners=4, zerophase=True)
+                    tr.taper(0.001) 
+                    tr.filter('bandpass', freqmin=1.5, freqmax=10)      #, corners=4, zerophase=True)
                 except:
-                    pass 
+                    pass
 
             ##### now that we have a clean trace, we get the p_pick from the phasenet_df and cut the trace around the p_pick #####
             # get the PhaseNet pick time
-            p_pick = UTCDateTime(pd.to_datetime(row.phase_time))
+            p_pick = UTCDateTime(pd.to_datetime(row.phase_time)) + self.correct_pn_picks
 
-            lentime = lensample/100/2
             ### slice the trace around the p_pick
-            tr = tr.slice(p_pick-(lentime-0.01), p_pick+lentime) # 0.63 seconds before and 0.64 seconds after the p_pick
-
-            if len(tr) == len(motion_input[0,:,0]):
-                motion_input[0,:,0] = tr.data[0:128] # assign the trace to the motion_input array
+            lentime = self.lensample/100/2
+            tr = tr.slice(p_pick-lentime, p_pick+lentime)               # 0.6 seconds before and after the p_pick
             
+            # Due to decimal rounding, the trace length may be 129 instead of 128.  
+            # check if the trace is the same length as the motion_input array
+            if len(tr.data) >= 128:
+                motion_input[0,:,0] = tr.data[0:128] # assign the trace to the motion_input array
+
                 # normalize the data by subtracting the mean and dividing by the standard deviation
-                if np.max(motion_input[0,:,0]) != 0:
+                if np.max(motion_input[0,:,0]) != 0:                    # check if the maximum value is not zero
                     motion_input[0,:,0] -= np.mean(motion_input[0,:,0]) # subtract the mean to center the data
                     norm_factor = np.std(motion_input[0,:,0])
 
                     if norm_factor != 0:
-                        motion_input[0,:,0] /= norm_factor # divide each element by the standard deviation
+                        motion_input[0,:,0] /= norm_factor              # divide each element by the standard deviation
                         diff_data = np.diff(motion_input[0, 64:, 0])    # np.diff calculates the difference between each element
                         diff_sign_data = np.sign(diff_data)             # np.sign returns the sign of the difference
                         motion_input[0, 65:, 1] = diff_sign_data[:]     # assign the sign of the difference to the second component
-            
+
                         ### PREDICT using Diting-Motion model
-                        pred_res = self.motion_model.predict(motion_input, verbose=0) # prediction result as a dictionary
+                        # prediction result as a dictionary
+                        pred_res = self.motion_model.predict(
+                            motion_input, 
+                            verbose=0,
+                            # experimental_relax_shapes=True,
+                            ) 
                         pred_fmp = (pred_res['T0D0'] + pred_res['T0D1'] + pred_res['T0D2'] + pred_res['T0D3']) / 4 # average of the 4 classes for the first motion prediction
                         pred_cla = (pred_res['T1D0'] + pred_res['T1D1'] + pred_res['T1D2'] + pred_res['T1D3']) / 4 # average of the 4 classes for CLA(idk)
+                        # print(pred_fmp[0, :])
 
                         """
                         if the 1st index is the maximum, then the polarity is UP/positive (+1)
@@ -984,6 +628,7 @@ class DitingMotionPicker:
                         polarity = polarity_dict.get(np.argmax(pred_fmp[0, :]), 'x')    # if max 1st index, polarity = U, if max 2nd index, polarity = D, else polarity = x
                         sharpness = sharpness_dict.get(np.argmax(pred_cla[0, :]), 'x')  # if max 1st index, sharpness = I, if max 2nd index, sharpness = E, else sharpness = x
                         # print(polarity, sharpness)
+                        # print(np.argmax(pred_fmp[0, :]))
 
                         # assign the polarity to the phasenet dataframe into the new columns
                         temp_pn_df.loc[index, 'diting_polarity'] = polarity
@@ -991,6 +636,184 @@ class DitingMotionPicker:
                         # print(index, polarity, sharpness)
 
         return temp_pn_df
+
+
+# ==================================================================================================
+#                                       FILE CONVERTER CLASS
+# ==================================================================================================
+
+class MyFileConverter:
+    """
+    Class to convert files from one format to another.
+    """
+    def __init__(self):
+        pass
+    
+    # ..............................................................................................
+    #                   PYROCKO MARKER FILE TO PHASENET PICKS [VERSION 2]
+    # ..............................................................................................
+
+    # .................. SUB-FUNCTION .....................
+    def PyrockoMarker2Dict(self, pyrocko_markers):
+        """
+        Read a Pyrocko marker file and convert to a dictionary.
+        output:
+        {
+            event_id: [[station_id, phase_time, phase_type, polarity], ...],
+            ...
+        }
+        """
+        # read pyrocko marker file
+        with open(pyrocko_markers, 'r') as f:
+            lines = f.readlines()[1:]                               # skip 1st line
+            lines = lines[:-1] if len(lines[-1]) == 0 else lines    # remove the last line if it is empty
+            total_lines = len(lines)
+
+            current_event = None # key for the dictionary
+            current_phases = []  # list as value for the dictionary
+            event_data = {}      # dictionary to store the event data
+
+            for i, line in enumerate(lines):
+                line = line.strip().split()
+                
+                if line[0] == 'event:': # get event details
+                    if current_event is not None:
+                        # when a new event is found, store the previous event data
+                        event_data[current_event] = current_phases
+                        # print(current_event)
+                        
+                    current_event = line[-2]
+                    current_phases = []       # reset the list for new event
+
+                elif line[0] == 'phase:':
+                    phase_type = line[-3]
+                    if phase_type != 'P':
+                        continue
+                    station_id_xx = line[4][:-1]
+                    phase_time = line[1]+"T"+line[2]
+                    polarity = line[-2]
+                    
+                    # append the phase details to the list for the current event
+                    current_phases.append([station_id_xx, phase_time, phase_type, polarity])
+
+                    # if this is the last line, store the event data
+                    if i == total_lines - 1:
+                        event_data[current_event] = current_phases
+
+        return event_data # dictionary with event_id as key and list of phases as value
+
+    # ..............................................................................................
+    def convert_pyrocko_picks_to_phasenet(self, pyrocko_markers, phasenet_diting_picks):
+        """
+        Convert pyrocko picks to phasenet format.
+        input: 
+            pyrocko_markers, 
+            phasenet_diting_picks
+        
+        N.B.: Only adds the pyrocko picks to the phasenet dataframe.
+              Does not create a new dataframe.
+        """
+
+        # read phasenet picks
+        pndting_df = pd.read_csv(phasenet_diting_picks, parse_dates=["begin_time", "phase_time"])
+
+        # create new columns for pyrocko picks
+        pndting_df['pyrocko_phase_time'], pndting_df['pyrocko_polarity'] = None, None
+                    
+        new_row_count, skipped_row_count = 0, 0
+
+        # read pyrocko marker file and convert to dictionary
+        event_data = self.PyrockoMarker2Dict(pyrocko_markers)
+        
+        for event_id, phase_data in event_data.items():
+            evfile_name = f"{event_id}.mseed"
+
+            # subset the dataframe for this event only
+            event_df = pndting_df[pndting_df['file_name'] == evfile_name]
+
+            for station_id_xx, phase_time, phase_type, polarity in phase_data:
+                polarity = str(polarity)
+                # print(type(station_id_xx), type(evfile_name), type(phase_type), type(phase_time), type(polarity))
+                # Efficiently find matching rows
+                match_mask = (event_df['station_id'] == station_id_xx) & \
+                            (event_df['phase_type'] == phase_type)  # Optional matching
+
+                matching_rows = event_df[match_mask].sort_values(by='phase_type')   # P and then S
+
+                if not matching_rows.empty:                     # At least one matching row exists 
+                    row_idx = matching_rows.index[0]            # Get the first matching row
+                    pndting_df.loc[row_idx, 'pyrocko_phase_time'] = phase_time
+                    pndting_df.loc[row_idx, 'pyrocko_polarity'] = polarity
+
+                # If no match, but polarity is valid and phase_type is P, add a new row
+                elif polarity in ['-1', '1'] and phase_type == 'P':
+                    new_row_dict = {
+                        'file_name': evfile_name,
+                        'station_id': station_id_xx,
+                        'phase_type': phase_type,
+                        'pyrocko_phase_time': phase_time,
+                        'pyrocko_polarity': polarity,
+                    }
+                    # print(new_row_dict) 
+                    new_row = pd.DataFrame([new_row_dict])
+
+                    # add the new row to the dataframe
+                    if not new_row.empty and not new_row.isna().all().all(): # Check if the new row is not empty
+                        pndting_df = pd.concat([pndting_df, new_row], ignore_index=True)
+                        new_row_count += 1
+
+                else:
+                    print(f"Skipping {station_id_xx} - {evfile_name} - {phase_type} - {polarity}")
+                    skipped_row_count += 1
+
+        print(f"Added {new_row_count} new rows to the dataframe.")
+        print(f"Skipped {skipped_row_count} rows.")
+
+        # sort by file_name and then station_id
+        pndting_df.sort_values(by=['file_name', 'station_id'], inplace=True)
+        pndting_df.reset_index(drop=True, inplace=True)
+
+        return pndting_df
+    
+    # ..............................................................................................
+    #                   PYROCKO MARKER FILE TO CSV FILE
+    # ..............................................................................................
+
+    def PyrockoMarker2CSV(
+        self, 
+        pyrocko_markers: str,
+        eq_cat_path: str,
+        output_csv: str = None,
+    ):
+        """
+        Convert Pyrocko marker file to a CSV file with columns:
+        [event_id,etime,elat,elon,edep,emag,station_id,phase_type,phase_polarity,phase_time]
+        N.B.: Same format as used for NCEDC picks to csv file.
+        """
+        # Read the EQ catalog file
+        eq_cat_df = pd.read_csv(eq_cat_path, parse_dates=['time'])
+        # Convert the pyrocko marker file to a dictionary
+        data_dict = self.PyrockoMarker2Dict(pyrocko_markers)
+        # Create an empty dataframe with the columns
+        df = pd.DataFrame(
+            columns=['event_id','etime','elat','elon','edep','emag','station_id','phase_type','phase_polarity','phase_time']
+        )
+        for event_id, phase_data in data_dict.items():
+            # [station_id_xx, phase_time, phase_type, polarity]
+            temp_df = pd.DataFrame(phase_data, columns=['station_id','phase_time','phase_type','phase_polarity'])
+            temp_df['event_id'] = event_id
+            temp_df['etime'] = eq_cat_df.loc[eq_cat_df.id == event_id, 'time'].values[0]
+            temp_df['elat'] = eq_cat_df.loc[eq_cat_df.id == event_id, 'latitude'].values[0]
+            temp_df['elon'] = eq_cat_df.loc[eq_cat_df.id == event_id, 'longitude'].values[0]
+            temp_df['edep'] = eq_cat_df.loc[eq_cat_df.id == event_id, 'depth'].values[0]
+            temp_df['emag'] = eq_cat_df.loc[eq_cat_df.id == event_id, 'mag'].values[0]
+            # add the temp_df to the main dataframe
+            df = pd.concat([df, temp_df], ignore_index=True)
+        if output_csv is not None:
+            df.to_csv(output_csv, index=False)
+        return df
+            
+
 
 
 # ==================================================================================================
@@ -1012,15 +835,26 @@ class SkhashRunner:
 
     # ----------------------------------------------------------------------------------------------
     # SKHASH format polarity file generator
+    # PhaseNet
     # ----------------------------------------------------------------------------------------------
     
-    def PhaseNet2SKHASH_polarity(self, PN_picks_path, eq_cat_path, manual_AI_commons_only=True, pyrocko_only=True, output_path=None):
+    def PhaseNet2SKHASH_polarity(self,  
+                eq_cat_path,
+                PN_picks_path=None, 
+                from_pyrocko_marker=False,
+                manual_AI_commons_only=True, 
+                pyrocko_only=True,
+                events_in_cataglog_only=False, 
+                output_path=None):
         """
         Convert the PhaseNet picks file to SKHASH format.
         event_id,event_id2,station,location,channel,p_polarity,origin_latitude,origin_longitude,origin_depth_km
         1,81905289,GTC,--,EHZ,0.02566,39.36743,-123.25380,7.14200
 
-        Input: PhaseNet picks dataframe
+        Input: 
+            PhaseNet picks dataframe/path to the file
+            EQ catalog dataframe/path to the file
+
         Output: SKHASH polarity format dataframe
                 - common events picked by both AI and manual
                     - if False: all diTing picks
@@ -1031,12 +865,18 @@ class SkhashRunner:
         """
 
         # Read the PhaseNet picks file
-        # cols = 'station_id,begin_time,phase_index,phase_time,phase_score,phase_type,file_name,phase_amplitude,phase_amp,'
-        #        'diting_polarity,diting_sharpness,pyrocko_phase_time,pyrocko_polarity'
-        pol_df = pd.read_csv(PN_picks_path, parse_dates=["phase_time", "pyrocko_phase_time"])
+        # if given type is a dataframe then use it, otherwise read the file
+        if not isinstance(PN_picks_path, pd.DataFrame):
+            print("Reading the PhaseNet picks file")
+            pol_df = pd.read_csv(PN_picks_path, parse_dates=["phase_time", "pyrocko_phase_time"])
+        else:
+            pol_df = PN_picks_path
 
         # Read the EQ catalog file
-        eq_cat_df = pd.read_csv(eq_cat_path, parse_dates=['time'])
+        if not isinstance(eq_cat_path, pd.DataFrame):
+            eq_cat_df = pd.read_csv(eq_cat_path, parse_dates=['time'])
+        else:
+            eq_cat_df = eq_cat_path
 
         # create an empty dataframe with column names:
         skhash_pol_df = pd.DataFrame(
@@ -1046,13 +886,20 @@ class SkhashRunner:
         # Group by file_name
         i = 1
         grouped = pol_df.groupby('file_name')
+        print(f"Total number of events: {len(grouped)}")
 
         for name, group in grouped:
             # Skip this group if manual_AI_commons_only is True and pyrocko picks are not available
-            if manual_AI_commons_only and np.max(np.abs(group.pyrocko_polarity)) != 1:
+            if manual_AI_commons_only and np.max(np.abs(group.pyrocko_polarity.astype(float))) != 1:
                 continue
             
+            # Get the event_id from the file_name (event_id.mseed)
             eventID = name.split('.')[0]
+
+            # Run only on the events in the catalog?
+            if events_in_cataglog_only:
+                if eventID not in eq_cat_df.id.values:
+                    continue
             
             # Get this group values into a skpol_df like empty dataframe
             event_df = pd.DataFrame(columns=skhash_pol_df.columns)
@@ -1060,8 +907,25 @@ class SkhashRunner:
             # split the station_id into station, location, channel by '.'
             event_df.station = group.station_id.str.split('.').str[1]
             event_df.location = group.station_id.str.split('.').str[2].apply(lambda x: '--' if x == '' else x)
-            event_df.channel = group.station_id.str.split('.').str[3] + 'Z'
-            event_df.p_polarity = group.pyrocko_polarity if pyrocko_only else group.diting_polarity
+            
+            if len(group.station_id[0].str.split('.').str[3]) == 2:
+                event_df.channel = group.station_id.str.split('.').str[3] + 'Z'
+            else:
+                event_df.channel = group.station_id.str.split('.').str[3]
+            
+
+            # Fill the polarity column based on the pyrocko_only flag
+            event_df.p_polarity = group.pyrocko_polarity    # add manual picks anyway
+            if pyrocko_only:
+                event_df.p_polarity = group.pyrocko_polarity
+            else: 
+                event_df.p_polarity = group.diting_polarity
+                # drop if polarity = 'x'
+                event_df = event_df[event_df.p_polarity != 'x']
+                # convert the polarity to 1, -1, 0 from U, D, anything else
+                # event_df.p_polarity = event_df.p_polarity.apply(lambda x: 1 if x == 'U' else -1 if x == 'D' else 0)
+                # drop rows with polarity 0
+                # event_df = event_df[event_df.p_polarity != 0]
             
             # VVI: Fill the event_id columns after the event_df is created with appropriate number of rows
             event_df.event_id = eventID
@@ -1078,13 +942,58 @@ class SkhashRunner:
             if not event_df.empty:
                 skhash_pol_df = pd.concat([skhash_pol_df, event_df], ignore_index=True)
 
-        # drop rows if station/location/channel are empty
-        skhash_pol_df = skhash_pol_df.dropna(subset=['station', 'location', 'channel'])
+        # drop rows if station/location/channel/polarity are empty
+        skhash_pol_df = skhash_pol_df.dropna(subset=['station', 'location', 'channel', 'p_polarity'])
 
         if output_path:
             skhash_pol_df.to_csv(output_path, index=False)
 
         return skhash_pol_df
+    # ----------------------------------------------------------------------------------------------
+    # SKHASH format polarity file generator
+    # 
+    # NCEDC
+    # ----------------------------------------------------------------------------------------------
+    def NCEDC2SKHASH_polarity(
+                self,
+                eq_cat_path,
+                picks_path,
+    ):
+        """
+        Convert the NCEDC picks file to SKHASH format.
+        """
+        # create an empty dataframe with column names:
+        skhash_pol_df = pd.DataFrame(
+            columns=['event_id','event_id2','station','location','channel','p_polarity','origin_latitude','origin_longitude','origin_depth_km']
+        )
+
+        # Read the EQ catalog file
+        eq_df = pd.read_csv(eq_cat_path,
+                            names=['event_id', 'time', 'latitude', 'longitude', 'depth_km', 'mag'],
+        )
+
+        # Read the NCEDC picks file
+        picks_df = pd.read_csv(picks_path,
+                            names=['event_id', 'etime', 'elat', 'elon', 'edepth', 'mag', 'station_id', 'phase_type', 'phase_polarity', 'phase_time'],
+        )
+        # only keep the P picks
+        picks_df = picks_df[picks_df.phase_type == 'P']
+        # drop no polarity picks
+        picks_df = picks_df.dropna(subset=['phase_polarity'])
+
+        skhash_pol_df.event_id = picks_df.event_id
+        skhash_pol_df.event_id2 = picks_df.event_id
+        skhash_pol_df.station = picks_df.station_id.astype(str).str.split('.').str[1]
+        skhash_pol_df.location = picks_df.station_id.astype(str).str.split('.').str[2].apply(lambda x: '--' if x == '' else x)
+        skhash_pol_df.channel = picks_df.station_id.astype(str).str.split('.').str[3]
+        skhash_pol_df.p_polarity = picks_df.phase_polarity.apply(lambda x: 1 if x == 'U' else -1 if x == 'D' else 0)
+        skhash_pol_df.origin_latitude = picks_df.elat.round(5)
+        skhash_pol_df.origin_longitude = picks_df.elon.round(5)
+        skhash_pol_df.origin_depth_km = picks_df.edepth.round(3)
+
+        return skhash_pol_df
+
+
 
     # ..............................................................................................
     #              Skhash station file generator function
@@ -1096,11 +1005,12 @@ class SkhashRunner:
         keep_Z_only = False,
         drop_duplicates = True,
         output_path = None,
-        client_list = ['IRIS', 'NCEDC', 'SCEDC'], 
+        client_list = ['IRIS', 'NCEDC'], #'SCEDC'], 
         starttime = "2008-01-01", 
         endtime = "2023-01-01",
-        region = [-128, -122.5, 39, 42],
+        region = [-125.5, -123, 39.75, 41.5],
         channel = 'HH*,BH*,HN*,EH*',
+        buffer_zone: float = 2, # degrees
         ):
 
         """ 
@@ -1125,18 +1035,47 @@ class SkhashRunner:
             """   
         
         if given_inventory == None:   
-
-            # Use WaveformParallelDownloader class's get_station_inventory function to get the inventory
-            
-            # inventory.write("mtj_merged_stations_temp.txt", format="STATIONTXT")
-            # given_inventory = "mtj_merged_stations_temp.txt"
-            pass
+            # Either download station inventory for a large area,
+            # or download the station inventory for 'all the stations' in the 
+            # polarity file. 
+            print(f"""
+            Downloading the station inventory for
+                            {region[3]}
+                        _________________
+                        |               |
+                        |               |
+            {region[0]} |               | {region[1]}
+                        |               |
+                        |_______________|
+                            {region[2]}
+            with a buffer zone of {buffer_zone} degrees.
+            """)
+            merged_inv = Inventory()
+            for client_name in client_list:
+                print(f"Downloading inventory from {client_name}")
+                client = Client(client_name, debug=False, timeout=60)
+                inv = client.get_stations(
+                    starttime=starttime,
+                    endtime=endtime,
+                    minlongitude=region[0] - buffer_zone,
+                    maxlongitude=region[1] + buffer_zone,
+                    minlatitude=region[2] - buffer_zone,
+                    maxlatitude=region[3] + buffer_zone,
+                    channel="**Z,**3",
+                    level="channel",
+                )
+                merged_inv += inv
+            # Cleanup to remove duplicate stations
+            merged_inv.write('./temp_inv.txt', format='stationtxt')
+            invdf = pd.read_csv('./temp_inv.txt', sep='|', header=0
+                ).drop_duplicates(subset=['#Network', 'Station', 'Location', 'Channel']
+                ).to_csv('./temp_inv.txt', sep='|', index=False)
+            given_inventory = './temp_inv.txt'
 
         else:
             print(f"Using the provided merged inventory file: {given_inventory}")
-            pass 
 
-        # read the merged inventory file
+        # read the merged inventory file, keep only the required columns
         inv_df = pd.read_csv(given_inventory, sep='|', skiprows=1, 
                         usecols=[1, 2, 3, 4, 5, 6], # '#Network|Station|Location|Channel|Latitude|Longitude|Elevation|Depth|Azimuth|Dip|SensorDescription|Scale|ScaleFreq|ScaleUnits|SampleRate|StartTime|EndTime'
                         names=['station','location','channel','latitude','longitude','elevation'],
@@ -1150,17 +1089,16 @@ class SkhashRunner:
             inv_df = inv_df[inv_df.channel.str[-1] == 'Z']
 
         if drop_duplicates:
-            inv_df = inv_df.drop_duplicates(subset=['station', 'location', 'channel']) # 'location', 'channel'
+            inv_df = inv_df.drop_duplicates(subset=['station', 'location', 'channel'])
         
         if skhash_polarity_file:
             skpol_df = pd.read_csv(skhash_polarity_file)
-
             # unique stations-location-channel
             unique_stations = skpol_df[['station', 'location', 'channel']].drop_duplicates()
-
             # keep only the stations that are in the polarity file
             inv_df = inv_df[inv_df.station.isin(unique_stations.station)]
 
+        inv_df.sort_values(by=['station', 'location', 'channel'], inplace=True)
         if output_path:
             inv_df.to_csv(output_path, index=False)
 
@@ -1208,15 +1146,16 @@ class SkhashRunner:
                                 min_polarity_weight = 0,
                                 dang = 5,
                                 nmc = 30,
-                                maxout = 500,
+                                maxout = 500, 
                                 ratmin = 2,
                                 badfrac = 0.1,
                                 qbadfrac = 0.3,
-                                delmax = 0,
+                                delmax = 175, # maximum allowed source-receiver distance in km.
+                                max_pgap = 65,
                                 cangle = 45,
                                 prob_max = 0.2,
                                 azmax = 0,
-                                max_agap = 190, # in MTJ there's usually no stations in the offshore area
+                                max_agap = 135, # in MTJ there's usually no stations in the offshore area
                                 outfolder_plots = None,
                                 plot_station_names = False,
                                 plot_acceptable_solutions = False,
@@ -1287,6 +1226,9 @@ $qbadfrac      # assumed noise in amplitude ratios, log10 (e.g. 0.3 for a factor
 
 $delmax        # maximum allowed source-receiver distance in km.
 {delmax}
+
+$max_pgap      # maximum allowed takeoff angle in degrees
+{max_pgap}
 
 $cangle        # angle for computing mechanisms probability
 {cangle}

@@ -1,0 +1,89 @@
+## Control file example for Maacama (SKHASH/examples/maacama_SKHASH_MTJ)
+
+$input_format  # format of input files
+SKHASH
+
+$num_cpus      # number of CPUs to use
+8
+
+$conpfile        # P-polarity input filepath
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/IN/pol_concensus_NCEDC_PN_noQC_2008.csv
+
+$stfile        # station list filepath
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/IN/station_master.csv
+
+$outfile1      # focal mechanisms output filepath 
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/OUT/out_NCEDC_PN_noQC_2008.csv
+
+$outfile2 : # Path to acceptable plane output file
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/OUT/out2_NCEDC_PN_noQC_2008.csv
+
+$outfile_pol_agree  # record of polarity (dis)agreeement output filepath # examples/maacama_SKHASH_MTJ/OUT/out_polagree.csv
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/OUT/out_polagree_NCEDC_PN_noQC_2008.csv
+
+$outfile_pol_info # examples/maacama_SKHASH_MTJ/OUT/out_polinfo.csv
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/OUT/out_polinfo_NCEDC_PN_noQC_2008.csv
+
+$vmodel_paths  # whitespace/newline delimited list of paths to the velocity models 
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/IN/vz.MTJ.txt
+
+$output_angle_precision
+4
+
+$require_network_match
+False
+
+$allow_duplicate_stations
+True
+
+$min_polarity_weight
+0
+
+$dang          # minimum grid spacing (degrees)
+5
+
+$nmc           # number of trials (e.g., 30)
+30
+
+$maxout        # max num of acceptable focal mech. outputs (e.g., 500)
+500
+
+$ratmin        # minimum allowed signal to noise ratio
+2
+
+$badfrac       # fraction polarities assumed bad
+0.1
+
+$qbadfrac      # assumed noise in amplitude ratios, log10 (e.g. 0.3 for a factor of 2)
+0.3
+
+$delmax        # maximum allowed source-receiver distance in km.
+150
+
+$max_pgap      # maximum allowed takeoff angle in degrees
+65
+
+$cangle        # angle for computing mechanisms probability
+45
+
+$prob_max      # probability threshold for multiples (e.g., 0.1)
+0.2
+
+$azmax         # Maximum allowed source-station azimuth uncertainty in degrees [0 = all allowed]
+0
+
+$max_agap      # maximum azimuthal gap in degrees
+135
+
+$allow_hypocenters_outside_table # False: only hypocenters within the velocity model are allowed
+True
+
+
+$outfolder_plots : #Path to folder where simple focal mechanism plots 
+/Users/mdarifulislam/Library/CloudStorage/OneDrive-IndianaUniversity/Research/Github/FM2STRESS/FM2STRESS_project/code/../results/foc_mech/NCEDC_comp/HASH_IN_OUT/OUT/plots_NCEDC_PN_noQC_2008
+
+$plot_station_names : #Plot station names 
+True
+
+$plot_acceptable_solutions : #Plot acceptable solutions 
+True
